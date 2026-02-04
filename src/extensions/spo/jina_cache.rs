@@ -431,7 +431,7 @@ mod tests {
         let mut cache = JinaCache::new("test_key");
 
         // First access - all API calls (use distinct strings to avoid near-match)
-        let texts = vec!["Ada", "Jan", "loves", "creates", "butterfly"];
+        let texts = vec!["Agent", "User", "loves", "creates", "butterfly"];
         for text in &texts {
             let _ = cache.get_fingerprint(text);
         }
@@ -454,8 +454,8 @@ mod tests {
     fn test_near_match() {
         let mut cache = JinaCache::new("test_key");
         
-        // Cache "Ada"
-        let _ = cache.get_fingerprint("Ada");
+        // Cache "Agent"
+        let _ = cache.get_fingerprint("Agent");
         
         // "ada" should near-match (case insensitive)
         let _ = cache.get_fingerprint("ada");
