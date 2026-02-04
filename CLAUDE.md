@@ -1,0 +1,533 @@
+# CLAUDE.md — Ladybug-RS
+
+> **Last Updated**: 2026-02-02
+> **Branch**: claude/code-review-X0tu2
+> **Status**: Arrow Flight streaming complete, documentation in progress
+
+## Documentation
+
+See `docs/` for comprehensive documentation:
+- [Getting Started](docs/guides/GETTING_STARTED.md)
+- [Architecture Overview](docs/architecture/OVERVIEW.md)
+- [Flight API](docs/api/FLIGHT_ENDPOINTS.md)
+- [MCP Actions](docs/api/MCP_ACTIONS.md)
+- [Redis Commands](docs/api/REDIS_COMMANDS.md)
+
+---
+
+## Project Identity
+
+**Ladybug-RS** is a pure-Rust cognitive substrate implementing:
+- 8+8 address model (65,536 addresses, no FPU required)
+- Redis syntax with cognitive semantics
+- Universal bind space where all query languages hit same addresses
+- 4096 CAM operations translated to LanceDB ops
+
+**Repository**: https://github.com/AdaWorldAPI/ladybug-rs
+
+---
+
+## The Architecture You MUST Understand
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                      PREFIX (8-bit) : SLOT (8-bit)                          │
+├─────────────────┬───────────────────────────────────────────────────────────┤
+│  0x00-0x0F:XX   │  SURFACE (16 prefixes × 256 = 4,096)                      │
+│                 │  0x00: Lance      0x04: NARS       0x08: Concepts         │
+│                 │  0x01: SQL        0x05: Causal     0x09: Qualia           │
+│                 │  0x02: Cypher     0x06: Meta       0x0A: Memory           │
+│                 │  0x03: GraphQL    0x07: Verbs      0x0B: Learning         │
+│                 │  0x0C-0x0F: Reserved                                      │
+├─────────────────┼───────────────────────────────────────────────────────────┤
+│  0x10-0x7F:XX   │  FLUID (112 prefixes × 256 = 28,672)                      │
+│                 │  Edges + Context selector + Working memory                │
+│                 │  TTL governed, promote/demote                             │
+├─────────────────┼───────────────────────────────────────────────────────────┤
+│  0x80-0xFF:XX   │  NODES (128 prefixes × 256 = 32,768)                      │
+│                 │  THE UNIVERSAL BIND SPACE                                 │
+│                 │  All query languages hit the same addresses               │
+└─────────────────┴───────────────────────────────────────────────────────────┘
+```
+
+**Critical**: The 16-bit address is NOT a hash. It's direct array indexing.
+- `let prefix = (addr >> 8) as u8;`
+- `let slot = (addr & 0xFF) as u8;`
+- 3-5 cycles. No HashMap. No FPU. Works on embedded/WASM.
+
+---
+
+## Current State
+
+**Codebase**: ~40K lines of Rust
+**Last updated**: 2026-02-02
+**DataFusion**: 51 (DF 52 upgrade path documented)
+**Arrow**: 48.x / arrow-flight 57.2 / tonic 0.14
+
+### ✅ Completed
+
+| Feature | Location | Status |
+|---------|----------|--------|
+| 8+8 addressing (prefix:slot) | bind_space.rs | ✓ Merged |
+| Universal BindSpace O(1) indexing | bind_space.rs | ✓ Merged |
+| 4096 CAM operations (16×256) | cam_ops.rs | ✓ Merged |
+| CAM execution bridge | cog_redis.rs | ✓ Merged |
+| Redis command executor | cog_redis.rs | ✓ Merged |
+| LanceDB/DataFusion 51 mappings | datafusion.rs | ✓ Merged |
+| HDR Cascade Search | hdr_cascade.rs | ✓ Merged |
+| **Arrow Flight Server** | flight/server.rs | ✓ Complete |
+| **Flight Streaming (DoGet)** | flight/server.rs | ✓ Complete |
+| **MCP Actions (DoAction)** | flight/actions.rs | ✓ Complete |
+| **Documentation skeleton** | docs/ | ✓ Created |
+
+### Recent Commits
+
+```
+376c685 feat: Implement full Arrow Flight streaming for fingerprints and search
+49956cc fix: Arrow Flight module compiles with correct tonic/prost versions
+f4a9054 fix: Temporarily disable flight module, fix action imports
+1821b91 feat: Add Arrow Flight MCP server with zero-copy support
+3f956c4 fix: Revert to DataFusion 51, document DF 52 upgrade path
+```
+
+### Key Files (Flight Module)
+
+```
+src/flight/
+├── mod.rs           # Module exports
+├── server.rs        # LadybugFlightService (717 lines)
+└── actions.rs       # MCP action handlers
+```
+
+### 🔄 Open PRs
+
+| PR | Description | Action |
+|----|-------------|--------|
+| #24 | [REFERENCE] 64-bit CAM index | Old code for visibility - don't merge |
+| #16 | Grammar engine | Audit recovery |
+| #15 | Crystal extension | Review |
+| #14 | ARCHITECTURE.md | Review + Merge |
+| #12 | Dependencies | Merge when needed |
+| #11 | Reconstructed files | ⚠️ AUDIT FIRST |
+
+### 🔴 Test Failures (10 total with crystal features)
+
+**Run with:** `cargo test --features "spo,quantum,codebook"`
+
+**Results:** 173 pass, 10 fail
+
+#### Original 5 (logic/algorithm issues)
+
+| Test | Error | Root Cause |
+|------|-------|------------|
+| `collapse_gate::test_sd_calculation` | `sd_spread > SD_BLOCK_THRESHOLD` | Threshold calculation logic |
+| `quantum_ops::test_permute_adjoint` | `left != right` | Permute/unpermute not inverse |
+| `cypher::test_variable_length` | `ParseFloatError` | Tokenizer can't parse number |
+| `causal_ops::test_store_query_correlation` | SPO substrate | CausalEngine query issue |
+| `causal::test_correlation_store` | `results.is_empty()` | Query returns no results |
+
+#### New 5 (crystal initialization/serialization)
+
+| Test | Error | Root Cause |
+|------|-------|------------|
+| `context_crystal::test_temporal_flow` | `popcount() == 0` | Crystal cells all zero after insert |
+| `nsm_substrate::test_codebook_initialization` | `primes.len() < 60` | Codebook not populating primes |
+| `nsm_substrate::test_learning` | `vocabulary_size() < 65` | Learning not adding to vocabulary |
+| `jina_cache::test_cache_hit_rate` | `left=4, right=5` | Off-by-one in cache hit counting |
+| `crystal_lm::test_serialize` | `unwrap() on None` | `from_bytes()` validation too strict |
+
+**Fix priority:**
+1. `jina_cache` — trivial off-by-one
+2. `crystal_lm` — serialization roundtrip
+3. `context_crystal` — crystal insert not persisting
+4. `nsm_substrate` — codebook initialization
+5. Original 5 — algorithm logic fixes
+
+### 📋 TODO (Next Session)
+
+**Priority 1: Fix 10 Test Failures**
+
+Quick wins:
+- [ ] `jina_cache` — fix off-by-one in hit counting
+- [ ] `crystal_lm` — relax `from_bytes()` validation or fix test data
+
+Crystal initialization:
+- [ ] `context_crystal` — debug why insert doesn't persist to cells
+- [ ] `nsm_substrate` — ensure codebook loads 60+ primes on init
+
+Algorithm fixes:
+- [ ] `collapse_gate` — review SD threshold calculation
+- [ ] `quantum_ops` — fix permute/unpermute to be true inverses
+- [ ] `cypher` — fix tokenizer number parsing
+- [ ] `causal_ops` + `causal` — debug SPO query returning empty
+
+**Priority 2: Wire HDR to RESONATE**
+- [ ] Connect hdr_cascade.rs to CogRedis RESONATE command
+- [ ] Add similarity search through BindSpace
+
+**Priority 3: Fluid Zone Lifecycle**
+- [ ] Implement TTL expiration (`tick()`)
+- [ ] Implement `crystallize()` — promote fluid to node
+- [ ] Implement `evaporate()` — demote node to fluid
+
+**Key files**:
+```
+src/flight/           # Arrow Flight gRPC server
+├── mod.rs            # Module exports
+├── server.rs         # LadybugFlightService (717 lines)
+└── actions.rs        # MCP action handlers
+
+src/storage/          # Storage layer
+├── bind_space.rs     # Universal DTO (8+8 addressing)
+├── cog_redis.rs      # Redis syntax adapter
+├── lance.rs          # LanceDB substrate
+└── database.rs       # Unified interface
+
+src/search/           # Search & similarity
+├── hdr_cascade.rs    # HDR filtering (~7ns per candidate)
+├── cognitive.rs      # NARS + Qualia + SPO
+└── causal.rs         # SEE/DO/IMAGINE
+
+src/learning/         # CAM operations
+├── cam_ops.rs        # 4096 CAM operations
+├── quantum_ops.rs    # Quantum-style operators
+├── rl_ops.rs         # Reinforcement learning
+└── causal_ops.rs     # Pearl's 3 rungs
+
+src/core/             # Core primitives
+├── simd.rs           # AVX-512/AVX2/NEON Hamming
+└── fingerprint.rs    # 10K-bit fingerprint
+```
+
+---
+
+## YOUR MISSION
+
+### Priority 1: Fix Remaining Test Failures
+
+5 tests still failing. Run and investigate:
+
+```bash
+cargo test 2>&1 | grep -E "FAILED|failures:"
+```
+
+### Priority 2: Merge HDR Cascade (PR #21)
+
+This is the "alien magic" — O(1) bind vector search via popcount stacking:
+
+```
+Level 0: 1-bit sketch  → 90% filtered
+Level 1: 4-bit count   → 90% of survivors
+Level 2: 8-bit count   → 90% of survivors  
+Level 3: Full popcount → exact distance
+
+~7ns per candidate vs ~100ns for float cosine
+```
+
+Review and merge, then wire to BindSpace.
+
+### Priority 3: Wire HDR to BindSpace
+
+Connect the HDR cascade search to the fluid zone for similarity queries:
+
+```rust
+// In cog_redis.rs RESONATE command
+pub fn resonate(&mut self, query: &Fingerprint, k: usize) -> Vec<(Addr, f32)> {
+    // Use HDR cascade for fast filtering
+    let candidates = self.hdr_index.search(query, k * 10);
+    
+    // Return top k with similarity scores
+    candidates.into_iter()
+        .take(k)
+        .map(|m| (m.addr, m.similarity))
+        .collect()
+}
+```
+
+### Priority 4: Implement Fluid Zone Lifecycle
+
+The fluid zone (0x10-0x7F) needs:
+
+```rust
+// TTL expiration
+pub fn tick(&mut self) {
+    let now = timestamp();
+    for chunk in &mut self.fluid {
+        for slot in chunk.iter_mut() {
+            if let Some(node) = slot {
+                if node.ttl.map(|t| t < now).unwrap_or(false) {
+                    *slot = None;  // Evaporate
+                }
+            }
+        }
+    }
+}
+
+// Promote to node space
+pub fn crystallize(&mut self, fluid_addr: Addr) -> Option<Addr> {
+    let node = self.read(fluid_addr)?;
+    let node_addr = self.allocate_node()?;
+    self.write(node_addr, node.clone());
+    self.delete(fluid_addr);
+    Some(node_addr)
+}
+
+// Demote from node space  
+pub fn evaporate(&mut self, node_addr: Addr, ttl: u32) -> Option<Addr> {
+    let node = self.read(node_addr)?;
+    let fluid_addr = self.allocate_fluid()?;
+    let mut node = node.clone();
+    node.ttl = Some(timestamp() + ttl);
+    self.write(fluid_addr, node);
+    self.delete(node_addr);
+    Some(fluid_addr)
+}
+```
+
+---
+
+## Key Principles
+
+### Two-Layer Architecture: Addressing vs Compute
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           LAYER 1: ADDRESSING                               │
+│                              (always int8)                                  │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  prefix:slot (u8:u8) → array index → 3-5 cycles                            │
+│  Works everywhere: embedded, WASM, Raspberry Pi, phone                     │
+│  NO runtime detection needed                                               │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                       LAYER 2: COMPUTE (adaptive)                           │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  AVX-512 (Railway, modern Xeon):                                           │
+│    → 8×64-bit popcount per instruction                                     │
+│    → 10K-bit fingerprint in 20 ops                                         │
+│    → ~2ns per comparison                                                   │
+│                                                                             │
+│  AVX2 (NUC 14, most laptops):                                              │
+│    → 4×64-bit via _mm256 intrinsics                                        │
+│    → ~4ns per comparison                                                   │
+│                                                                             │
+│  Fallback (WASM, ARM, old x86):                                            │
+│    → u64::count_ones() loop                                                │
+│    → ~50ns per comparison                                                  │
+│    → Still works, just slower                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+| What | How | Why |
+|------|-----|-----|
+| Address decode | `u8` shift/mask | Universal, no feature detect |
+| Bucket lookup | `[prefix][slot]` | Array index, no hash |
+| Hamming distance | `#[cfg(target_feature)]` | Best available SIMD |
+| Batch compare | AVX-512 if available | 8 fingerprints parallel |
+| HDR cascade | Popcount at each level | Adaptive precision |
+
+### Addressing: ALWAYS Simple (int8)
+
+```rust
+// This runs everywhere, no feature detection
+#[inline(always)]
+fn lookup(addr: u16) -> (u8, u8) {
+    ((addr >> 8) as u8, (addr & 0xFF) as u8)
+}
+
+// Array indexing, not HashMap
+let prefix = (addr >> 8) as usize;
+let slot = (addr & 0xFF) as usize;
+let result = &arrays[prefix][slot];  // 3-5 cycles, not 30-100
+```
+
+### Compute: ADAPTIVE (use best available)
+
+```rust
+// AVX-512 path (Railway, Xeon): ~2ns per candidate
+#[cfg(target_feature = "avx512vpopcntdq")]
+#[target_feature(enable = "avx512f,avx512vpopcntdq")]
+unsafe fn hamming_batch_8(query: &[u64; 156], candidates: &[[u64; 156]; 8]) -> [u32; 8] {
+    use std::arch::x86_64::*;
+    // 8 fingerprints in parallel, 20 AVX-512 ops each
+    // ...
+}
+
+// AVX2 path (most laptops, NUC): ~4ns per candidate
+#[cfg(all(target_feature = "avx2", not(target_feature = "avx512vpopcntdq")))]
+fn hamming_batch_4(query: &[u64; 156], candidates: &[[u64; 156]; 4]) -> [u32; 4] {
+    // 4 fingerprints in parallel
+    // ...
+}
+
+// Fallback (WASM, ARM, old x86): ~50ns but works everywhere
+#[cfg(not(any(target_feature = "avx2", target_feature = "avx512vpopcntdq")))]
+fn hamming_scalar(a: &[u64; 156], b: &[u64; 156]) -> u32 {
+    a.iter().zip(b).map(|(x, y)| (x ^ y).count_ones()).sum()
+}
+```
+
+### Float Only at API Boundary
+
+```rust
+// Internal: pure integer
+let distance: u32 = hamming(a, b);  // 0-10000
+
+// API boundary only: convert for user
+let similarity: f32 = 1.0 - (distance as f32 / 10000.0);  // 0.0-1.0
+```
+
+### Fluid Zone is Context Selector
+
+The fluid zone (0x10-0x7F) determines what the node space MEANS:
+- Different context = different interpretation of same node address
+- Hot edges live here with TTL
+- Promote to nodes when crystallized
+
+### Universal DTO
+
+All query languages hit the same `BindNode`:
+
+```rust
+pub struct BindNode {
+    pub addr: u16,                    // WHERE
+    pub fingerprint: [u8; 48],        // WHAT (384 bits, truncated from 10K)
+    pub qualia: [i8; 8],              // HOW IT FEELS
+    pub truth: (u8, u8),              // NARS <f, c>
+    pub created_at: u32,              // WHEN
+    pub ttl: Option<u32>,             // FORGET WHEN
+}
+```
+
+---
+
+## MCP Agent Guidance
+
+When context window > 60%, spawn continuation with state:
+
+```yaml
+handover:
+  current_task: "Implementing surface 0x02 (Cypher) ops"
+  files_modified:
+    - src/learning/cam_ops.rs
+    - src/storage/cog_redis.rs
+  decisions:
+    - "Using recursive CTEs for path traversal"
+    - "shortestPath maps to Dijkstra via window functions"
+  next_steps:
+    - "Complete 0x02:08-0x02:FF"
+    - "Wire to cog_redis GRAPH.QUERY command"
+  blockers: []
+```
+
+### Specialist Agents
+
+- **🔬 LanceExpert**: Deep knowledge of LanceDB, Arrow, DataFusion
+- **🕸️ GraphSage**: Cypher semantics, path algorithms, CSR
+- **🧠 CognitiveArch**: NARS, qualia, truth maintenance
+- **⚡ SIMDWizard**: AVX-512, popcount, batch ops
+
+Spawn when domain expertise needed.
+
+---
+
+## DataFusion 52 Upgrade Path
+
+Currently on DF 51 to avoid dependency issues. For DF 52 upgrade:
+
+1. **Add to vendored fork Cargo.toml**:
+```toml
+[workspace.dependencies]
+lzma-sys = { version = "0.1", features = ["static"] }
+```
+
+2. **Update Arrow crates to 52.x**
+
+3. **Verify tonic/prost alignment** (currently 0.14)
+
+4. **Test parquet compression features**
+
+**Vendored forks** (when ready):
+- `vendor/arrow-datafusion/`
+- `vendor/datafusion-ballista/`
+- `vendor/datafusion-flight-sql-server/`
+- `vendor/datafusion-sqlparser-rs/`
+
+---
+
+## Testing
+
+```bash
+# With recommended features
+cargo test --features "simd,parallel,codebook,hologram,quantum"
+
+# Flight module
+cargo check --features "flight"
+
+# Specific module
+cargo test storage::bind_space
+cargo test search::hdr_cascade
+```
+
+---
+
+## Quick Start
+
+```bash
+# Clone
+git clone https://github.com/AdaWorldAPI/ladybug-rs.git
+cd ladybug-rs
+
+# Check current state
+find src -name "*.rs" | wc -l
+wc -l src/learning/cam_ops.rs
+wc -l src/storage/bind_space.rs
+
+# Key files to understand first
+cat src/storage/bind_space.rs | head -100
+cat src/learning/cam_ops.rs | head -100
+```
+
+---
+
+## Open PRs (Review Before Merge)
+
+| PR | Status | Notes |
+|----|--------|-------|
+| #17 | Open | Cognitive operation enums |
+| #16 | Open | Grammar engine (audit recovery) |
+| #15 | Open | Crystal extension |
+| #14 | Open | ARCHITECTURE.md |
+| #12 | Open | Dependencies |
+| #11 | Open | ⚠️ Reconstructed files - AUDIT FIRST |
+| #10 | Open | ⚠️ Old 64-bit model - may conflict with 8+8 |
+| #9 | Open | ⚠️ Kuzu stubs - FALSE BELIEF, close it |
+
+---
+
+## The Learning Loop
+
+```
+1. ENCOUNTER → Read existing code, understand schema
+2. STRUGGLE  → Hit type mismatches, address conflicts
+3. BREAKTHROUGH → See how 8+8 maps to LanceDB
+4. CONSOLIDATE → Implement ops, test, commit
+5. APPLY → Use ops from cog_redis commands
+6. META-LEARN → Capture patterns for future sessions
+```
+
+**Capture moments**: When you figure something out, log it.
+The learning curve IS the knowledge.
+
+---
+
+## Contact
+
+**Owner**: Jan Hübener (jahube)
+**GitHub**: https://github.com/AdaWorldAPI/ladybug-rs
+
+---
+
+**🦔 LADYBUG: Where all queries become one.**
