@@ -1176,7 +1176,7 @@ impl BindSpace {
         addr
     }
 
-    /// Parse DN path to address: "Ada:A:soul:identity" -> Addr
+    /// Parse DN path to address: "Agent:A:core:identity" -> Addr
     /// Returns None if path not found
     pub fn dn_lookup(&self, path: &str) -> Option<Addr> {
         // Hash the full path to get deterministic address
@@ -1189,7 +1189,7 @@ impl BindSpace {
         }
     }
 
-    /// O(1) parent path extraction: "Ada:A:soul:identity" -> "Ada:A:soul"
+    /// O(1) parent path extraction: "Agent:A:core:identity" -> "Agent:A:core"
     /// Pure string operation, no lookup needed
     #[inline]
     pub fn dn_parent_path(path: &str) -> Option<&str> {
@@ -1382,11 +1382,11 @@ fn label_fingerprint(label: &str) -> [u64; FINGERPRINT_WORDS] {
 
 /// Convert DN path to deterministic address
 ///
-/// "Ada:A:soul:identity" -> Addr(0x80+prefix_hash, slot_hash)
+/// "Agent:A:core:identity" -> Addr(0x80+prefix_hash, slot_hash)
 ///
 /// This gives O(1) lookup AND implicit hierarchy:
-/// - "Ada:A:soul:identity" -> address X
-/// - "Ada:A:soul" (parent) -> different address Y (O(1) string truncate)
+/// - "Agent:A:core:identity" -> address X
+/// - "Agent:A:core" (parent) -> different address Y (O(1) string truncate)
 pub fn dn_path_to_addr(path: &str) -> Addr {
     use std::hash::{Hash, Hasher};
     use std::collections::hash_map::DefaultHasher;
@@ -1620,39 +1620,39 @@ mod tests {
     #[test]
     fn test_dn_path_to_addr() {
         // Same path should give same address
-        let a1 = dn_path_to_addr("Ada:A:soul:identity");
-        let a2 = dn_path_to_addr("Ada:A:soul:identity");
+        let a1 = dn_path_to_addr("Agent:A:core:identity");
+        let a2 = dn_path_to_addr("Agent:A:core:identity");
         assert_eq!(a1, a2);
 
         // Different paths should (likely) give different addresses
-        let b = dn_path_to_addr("Ada:A:soul:core");
+        let b = dn_path_to_addr("Agent:A:core:state");
         assert_ne!(a1, b);
 
         // Parent path is different
-        let parent = dn_path_to_addr("Ada:A:soul");
+        let parent = dn_path_to_addr("Agent:A:core");
         assert_ne!(a1, parent);
     }
 
     #[test]
     fn test_dn_parent_path() {
         // O(1) parent extraction from DN path
-        assert_eq!(BindSpace::dn_parent_path("Ada:A:soul:identity"), Some("Ada:A:soul"));
-        assert_eq!(BindSpace::dn_parent_path("Ada:A:soul"), Some("Ada:A"));
-        assert_eq!(BindSpace::dn_parent_path("Ada:A"), Some("Ada"));
-        assert_eq!(BindSpace::dn_parent_path("Ada"), None);
+        assert_eq!(BindSpace::dn_parent_path("Agent:A:core:identity"), Some("Agent:A:core"));
+        assert_eq!(BindSpace::dn_parent_path("Agent:A:core"), Some("Agent:A"));
+        assert_eq!(BindSpace::dn_parent_path("Agent:A"), Some("Agent"));
+        assert_eq!(BindSpace::dn_parent_path("Agent"), None);
     }
 
     #[test]
     fn test_dn_levenshtein() {
         // Same string
-        assert_eq!(dn_levenshtein("Ada:A:soul", "Ada:A:soul"), 0);
+        assert_eq!(dn_levenshtein("Agent:A:core", "Agent:A:core"), 0);
 
         // One char difference
-        assert_eq!(dn_levenshtein("Ada:A:soul:x", "Ada:A:soul:y"), 1);
+        assert_eq!(dn_levenshtein("Agent:A:core:x", "Agent:A:core:y"), 1);
 
         // Different lengths
-        assert_eq!(dn_levenshtein("Ada", ""), 3);
-        assert_eq!(dn_levenshtein("", "Ada"), 3);
+        assert_eq!(dn_levenshtein("Agent", ""), 3);
+        assert_eq!(dn_levenshtein("", "Agent"), 3);
     }
 
     #[test]
@@ -1661,7 +1661,7 @@ mod tests {
         let fp = [123u64; FINGERPRINT_WORDS];
 
         // Create DN path - this should create parent chain
-        let leaf = space.write_dn_path("Ada:A:soul:identity", fp, 5);
+        let leaf = space.write_dn_path("Agent:A:core:identity", fp, 5);
         assert!(leaf.is_node());
 
         // Check the node was created
