@@ -1,4 +1,4 @@
-//! # LadybugDB
+//! # AGI-RS (LadybugDB)
 //! 
 //! Unified cognitive database: SQL + Cypher + Vector + Hamming + NARS + Counterfactuals.
 //! Built on Lance columnar storage with AGI operations as first-class primitives.
@@ -27,25 +27,25 @@
 //! let triangle = GrammarTriangle::from_text("I want to understand this");
 //! let fingerprint = triangle.to_fingerprint();
 //! 
-//! // Butterfly detection (causal amplification chains)
-//! let butterflies = db.detect_butterflies("change_id", 5.0, 10).await?;
-//! 
-//! // Counterfactual reasoning
-//! let forked = db.fork();
+//! // Cognition (psychology modeling)
+//! use ladybug::cognition::{MaslowEngine, GoalGenerator, DriveEngine};
+//! let maslow = MaslowEngine::new();
+//! let goals = GoalGenerator::new();
 //! ```
 //! 
 //! ## Architecture
 //! ```text
 //! ┌─────────────────────────────────────────────────────────────────┐
-//! │                        LADYBUGDB                                 │
+//! │                        AGI-RS (LADYBUGDB)                        │
 //! ├─────────────────────────────────────────────────────────────────┤
 //! │                                                                  │
-//! │   Grammar  → NSM + Causality + Qualia → 10K Fingerprint         │
-//! │   SQL      → DataFusion + Custom UDFs (hamming, similarity)     │
-//! │   Cypher   → Parser + Transpiler → Recursive CTEs               │
-//! │   Vector   → LanceDB native ANN indices                         │
-//! │   Hamming  → AVX-512 SIMD (65M comparisons/sec)                 │
-//! │   NARS     → Non-Axiomatic Reasoning System                     │
+//! │   Grammar   → NSM + Causality + Qualia → 10K Fingerprint        │
+//! │   Cognition → Maslow + Drive + Goals + Volition + Values        │
+//! │   SQL       → DataFusion + Custom UDFs (hamming, similarity)    │
+//! │   Cypher    → Parser + Transpiler → Recursive CTEs              │
+//! │   Vector    → LanceDB native ANN indices                        │
+//! │   Hamming   → AVX-512 SIMD (65M comparisons/sec)                │
+//! │   NARS      → Non-Axiomatic Reasoning System                    │
 //! │   Storage: Lance columnar format, zero-copy Arrow               │
 //! │   Indices: IVF-PQ (vector), scalar (labels), Hamming (custom)   │
 //! └─────────────────────────────────────────────────────────────────┘
@@ -58,8 +58,9 @@
 // === Core modules ===
 pub mod core;
 pub mod cognitive;
+pub mod cognition;  // NEW: Psychology modeling (Maslow, drive, goals, volition, values)
 pub mod nars;
-pub mod grammar;  // NEW: Grammar Triangle
+pub mod grammar;  // Grammar Triangle
 pub mod graph;
 pub mod world;
 pub mod search;
@@ -91,6 +92,15 @@ pub use crate::cognitive::{Thought, Concept, Belief, ThinkingStyle};
 
 // NARS (Non-Axiomatic Reasoning)
 pub use crate::nars::{TruthValue, Evidence, Deduction, Induction, Abduction};
+
+// Cognition (Psychology modeling)
+pub use crate::cognition::{
+    NeedLevel, MaslowEngine,
+    DriveEngine, DriveSignal,
+    GoalGenerator, AutonomousGoal,
+    WillEngine, Volition,
+    ValueEngine, ValueAttractor,
+};
 
 // Grammar Triangle (universal input layer)
 pub use crate::grammar::{GrammarTriangle, NSMField, CausalityFlow, QualiaField};
@@ -137,8 +147,6 @@ pub enum Error {
     #[error("DataFusion error: {0}")]
     DataFusion(#[from] datafusion::error::DataFusionError),
 }
-
-// StorageError conversion removed - use Error::Storage directly
 
 impl From<query::QueryError> for Error {
     fn from(e: query::QueryError) -> Self {
