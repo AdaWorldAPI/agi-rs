@@ -2028,17 +2028,17 @@ impl CogRedis {
     // DN TREE COMMANDS (Distinguished Name hierarchy)
     // =========================================================================
     //
-    // DN paths use ':' as separator: "Ada:A:soul:identity"
+    // DN paths use ':' as separator: "Agent:A:core:identity"
     // - O(1) address lookup via dn_path_to_addr()
     // - O(1) parent extraction via string truncation
     // - Zero-copy children via BitpackedCSR
     //
     // Examples:
-    //   DN.GET Ada:A:soul:identity       → Get node at path
-    //   DN.SET Ada:A:soul:new "content"  → Create with parent chain
-    //   DN.PARENT Ada:A:soul:identity    → Returns "Ada:A:soul"
-    //   DN.CHILDREN Ada:A:soul           → List children
-    //   DN.ANCESTORS Ada:A:soul:identity → ["Ada:A:soul", "Ada:A", "Ada"]
+    //   DN.GET Agent:A:core:identity       → Get node at path
+    //   DN.SET Agent:A:core:new "content"  → Create with parent chain
+    //   DN.PARENT Agent:A:core:identity    → Returns "Agent:A:core"
+    //   DN.CHILDREN Agent:A:core           → List children
+    //   DN.ANCESTORS Agent:A:core:identity → ["Agent:A:core", "Agent:A", "Agent"]
     //   DN.TREE Ada:A 3                  → Walk tree to depth 3
 
     /// DN.GET path - Get node at DN path
@@ -3076,7 +3076,7 @@ mod tests {
 
     #[test]
     fn test_is_dn_path() {
-        assert!(CogRedis::is_dn_path("Ada:A:soul:identity"));
+        assert!(CogRedis::is_dn_path("Agent:A:core:identity"));
         assert!(CogRedis::is_dn_path("a:b"));
         assert!(!CogRedis::is_dn_path("simple_key"));
         assert!(!CogRedis::is_dn_path("mykey"));
@@ -3087,7 +3087,7 @@ mod tests {
         let mut redis = CogRedis::new();
 
         // DN.SET creates node with parent chain
-        let result = redis.execute_command("DN.SET Ada:A:soul:identity hello");
+        let result = redis.execute_command("DN.SET Agent:A:core:identity hello");
         match result {
             RedisResult::String(addr) => {
                 assert!(!addr.is_empty(), "Should return address");
@@ -3096,7 +3096,7 @@ mod tests {
         }
 
         // DN.GET retrieves the node
-        let result = redis.execute_command("DN.GET Ada:A:soul:identity");
+        let result = redis.execute_command("DN.GET Agent:A:core:identity");
         match result {
             RedisResult::Array(arr) => {
                 assert!(!arr.is_empty(), "Should return node info");
@@ -3114,15 +3114,15 @@ mod tests {
         let mut redis = CogRedis::new();
 
         // Create a deep path
-        redis.execute_command("DN.SET Ada:A:soul:identity test");
+        redis.execute_command("DN.SET Agent:A:core:identity test");
 
         // Get parent path
-        let result = redis.execute_command("DN.PARENT Ada:A:soul:identity");
+        let result = redis.execute_command("DN.PARENT Agent:A:core:identity");
         match result {
             RedisResult::Array(arr) => {
                 // First element should be parent path
                 if let RedisResult::String(path) = &arr[0] {
-                    assert_eq!(path, "Ada:A:soul");
+                    assert_eq!(path, "Agent:A:core");
                 }
             }
             _ => panic!("Expected array with parent path"),
@@ -3138,10 +3138,10 @@ mod tests {
         let mut redis = CogRedis::new();
 
         // Create node with RUNG
-        redis.execute_command("DN.SET Ada:A:soul:secrets deep_content RUNG 5");
+        redis.execute_command("DN.SET Agent:A:core:secrets deep_content RUNG 5");
 
         // Check depth (0=Ada, 1=A, 2=soul, 3=secrets)
-        let result = redis.execute_command("DN.DEPTH Ada:A:soul:secrets");
+        let result = redis.execute_command("DN.DEPTH Agent:A:core:secrets");
         match result {
             RedisResult::Integer(depth) => {
                 assert_eq!(depth, 3, "Depth should be 3");
@@ -3150,7 +3150,7 @@ mod tests {
         }
 
         // Check rung
-        let result = redis.execute_command("DN.RUNG Ada:A:soul:secrets");
+        let result = redis.execute_command("DN.RUNG Agent:A:core:secrets");
         match result {
             RedisResult::Integer(rung) => {
                 assert_eq!(rung, 5, "Rung should be 5");
@@ -3164,12 +3164,12 @@ mod tests {
         let mut redis = CogRedis::new();
 
         // Create parent and children
-        redis.execute_command("DN.SET Ada:A:soul:child1 first");
-        redis.execute_command("DN.SET Ada:A:soul:child2 second");
-        redis.execute_command("DN.SET Ada:A:soul:child3 third");
+        redis.execute_command("DN.SET Agent:A:core:child1 first");
+        redis.execute_command("DN.SET Agent:A:core:child2 second");
+        redis.execute_command("DN.SET Agent:A:core:child3 third");
 
-        // Get children of Ada:A:soul
-        let result = redis.execute_command("DN.CHILDREN Ada:A:soul");
+        // Get children of Agent:A:core
+        let result = redis.execute_command("DN.CHILDREN Agent:A:core");
         match result {
             RedisResult::Array(arr) => {
                 println!("Found {} children", arr.len());
@@ -3184,10 +3184,10 @@ mod tests {
         let mut redis = CogRedis::new();
 
         // Create deep path
-        redis.execute_command("DN.SET Ada:A:soul:identity:deep value");
+        redis.execute_command("DN.SET Agent:A:core:identity:deep value");
 
         // Get ancestors
-        let result = redis.execute_command("DN.ANCESTORS Ada:A:soul:identity:deep");
+        let result = redis.execute_command("DN.ANCESTORS Agent:A:core:identity:deep");
         match result {
             RedisResult::Array(arr) => {
                 // Should have ancestors: identity, soul, A, Ada
@@ -3202,7 +3202,7 @@ mod tests {
         let mut redis = CogRedis::new();
 
         // Create a small tree
-        redis.execute_command("DN.SET Ada:A:soul value1");
+        redis.execute_command("DN.SET Agent:A:core value1");
         redis.execute_command("DN.SET Ada:A:core value2");
         redis.execute_command("DN.SET Ada:B:thoughts value3");
 
